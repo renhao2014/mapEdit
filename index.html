@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8" />
+		<title></title>
+		<link href="lib/layer/theme/default/layer.css" rel="stylesheet" type="text/css"/>
+	</head>
+	<style>
+		body {
+		    padding:0;  /*去除内边距*/
+		    border:0;   /*去除边框*/
+		    margin:0;   /*去除外边距*/
+		}
+		#functionDiv{
+			position:absolute;
+			left:0px;
+			top:0px;
+			z-index:9999999;
+		}
+		#stone.active{
+			background-color: black;
+		}
+		#wood.active{
+			background-color: darkolivegreen;
+		}
+		#steelEnemy.active{
+			background-color: darkred;
+		}
+		#woodEnemy.active{
+			background-color: orange;
+		}
+		#nothing.active{
+			background-color: transparent;
+		}
+		table{
+			border-collapse: collapse;
+			color: darkgray;
+		}
+		table,table tr th, table tr td {
+			 border:1px solid white;
+			 padding: 0px; 
+		}
+		table td{
+			height: 39px;
+			width: 39px;
+			font-size: 10px;
+			opacity: 0.5;
+		}
+		
+		
+	</style>
+	<body>
+		<div id="map">
+			<img id="mapBackground" src="images/map/longrenzhita.png" />
+			<div id="functionDiv">
+				<!--根据图片放置表格-->
+				<table id="cellTable">
+								
+				</table>
+			</div>
+		</div>
+		<div style="height: 200px;height: 200px;">
+			<hr/>
+			<div style="margin-left: 10px;margin-bottom: 15px;">
+				<div style="display: none;">
+				<span>导入图片</span>
+				<input type="file" id="importPic" accept="image/png"/>  &nbsp;&nbsp;&nbsp;
+				</div>
+				
+				<span>导入数据</span>
+				<input type="file" id="importData" accept=".json"/>  &nbsp;&nbsp;&nbsp;
+				<input type="button" id="exportData" value="导出数据"/>  &nbsp;&nbsp;&nbsp;
+			</div>
+			
+			<div style="margin-left: 10px;margin-bottom: 15px;">
+				<span>不透明度：</span><input type="range" id="backgroundOpacity" min="0" max="100" value="98"/>
+				<span>（最右边，完全不透明）</span>
+			</div>
+			
+			<div style="margin-left: 10px;margin-bottom: 15px;">
+				<input type="button" id="stone" name="cellType" value="岩石"/> <span>说明：障碍物，不能被打破</span> &nbsp;&nbsp;&nbsp;
+				<input type="button" id="wood" name="cellType"  value="木桩"/> <span>说明：障碍物，可以被打破</span> &nbsp;&nbsp;&nbsp;
+				<input type="button" id="steelEnemy" name="cellType" value="钢铁敌人"/> <span>说明：固定的敌人，不能被打破</span> &nbsp;&nbsp;&nbsp;
+				<input type="button" id="woodEnemy" name="cellType" value="木头敌人"/> <span>说明：固定的敌人，可以被打破</span> &nbsp;&nbsp;&nbsp;
+				<input type="button" id="nothing" name="cellType" class="active" value="空地"/> <span>说明：空地，可以在上面行走</span> &nbsp;&nbsp;&nbsp;
+			</div>
+			
+			<div style="margin-left: 10px;margin-bottom: 15px;">
+				<span>起始行：</span><input type="number" id="startRow" style="width: 80px;" />
+				<span>起始列：</span><input type="number" id="startCol" style="width: 80px;" />
+				<span>结束行：</span><input type="number" id="endRow" style="width: 80px;" />
+				<span>结束列：</span><input type="number" id="endCol" style="width: 80px;" />
+				<input type="button" id="setArea"  value="该区域全部格子设置为上面选择的类型"/>
+			</div>
+			
+		</div>
+		
+
+		<script id="tpl-cell" type="text/html">
+			{{each cellsDataArray}}
+			<tr>
+				{{each cellsDataArray[$index]}}
+					<td row="{{$value.row}}" col="{{$value.col}}" id="{{$value.row}}_{{$value.col}}">
+						<div class="cell">{{$value.row}}-{{$value.col}}</div>
+					</td>
+				{{/each}}
+			</tr>
+			{{/each}}
+		</script>
+
+
+		<script src="js/jquery-1.8.0.min.js"></script>
+		<script src="js/template-web.js"></script>
+		<script src="lib/layer/layer.js"></script>
+		
+		
+		<script type="text/javascript">
+			var currentType=0;//当前格子类型（ID）
+			//二维数组 数组中的对象记载着格子信息
+			cellsDataArray = new Array(); 
+
+			picData={
+				row:0,
+				col:0,
+			};
+			
+			var allData={
+				picData:picData,
+				cellsDataArray:cellsDataArray
+			}
+			
+			$(function(){
+				//根据图像初始化表格
+				refreshGridFromPic();
+				
+				
+				//监听导入图片
+//				$("#importPic").change(function(){
+////					var img=$("#importPic");
+//					var width = getWH(img,"width");
+//					alert(width);
+//				});
+				
+				//监听调整透明度
+				$("#backgroundOpacity").change(function(){
+					opacityChanged();
+				});
+				opacityChanged();
+				
+				//监听对象选择
+				$("input[name='cellType']").click(function(){
+					$("input[name='cellType']").removeClass("active");
+					$(this).addClass('active');
+					currentType=$(this).prop('id');
+					//alert(currentType);
+				})
+				
+				//监听格子点击事件
+				$("table td").click(function(){
+					console.log("格子"+$(this).attr('row')+","+$(this).attr('col')+"被点击");
+					cellClicked($(this).attr('row'),$(this).attr('col'));
+				});
+				
+				//监听区域设置事件
+				$("#setArea").click(function(){
+					if(startRow == '' ||startCol == '' ||endRow == '' ||endCol == ''  ){
+						layer.msg("请正确设置区域参数");
+						return;
+					}
+					var startRow=parseInt($("#startRow").val());
+					var startCol=parseInt($("#startCol").val());
+					var endRow=parseInt($("#endRow").val());
+					var endCol=parseInt($("#endCol").val())	;
+					var index=layer.confirm('确认修改区域吗？', {
+					  btn: ['确认','取消'] //按钮
+					}, function(){
+						for(var i=startRow;i<=endRow;i++){
+							for (var j = startCol;j <= endCol; j++) {
+								
+								cellClicked(i,j);
+							}						
+						}
+						console.log("区域设置完毕");
+						layer.close(index);
+					});					
+				});				
+				
+				//监听导出数据按钮
+				$("#exportData").click(function(){
+					exportData();
+				});
+				
+				
+				//点击刷新 关闭时提示
+//			    window.onbeforeunload = function(event) {
+//			          return "您编辑的信息尚未保存，您确定要离开吗？"//这里内容不会显示在提示框，为了增加语义化。
+//			    };
+			
+				
+			});
+			
+			
+			//读取背景图   更新格子数量以及对应数据
+			//二维格子
+			function refreshGridFromPic(){
+				var img = new Image()
+				img.src = "images/map/longrenzhita.png";
+				console.log('width:'+img.width+',height:'+img.height);
+				picData.row=img.height/40;
+				picData.col=img.width/40;
+			
+				for(var i=0;i<picData.row;i++){
+					cellsDataArray[i]=new Array();
+					for(var j=0;j<picData.col;j++){ 
+						var cell=new Object();
+						cell.row=i;
+						cell.col=j;
+						cell.type=0;//默认都是空地
+						cellsDataArray[i][j]=cell;
+					}
+				}
+				
+				var data={
+					picData:picData,
+					cellsDataArray:cellsDataArray,
+				};
+
+				var html = template('tpl-cell',data);
+				//console.log(html);
+				$("#cellTable").append(html);
+				
+			}
+			
+			function refreshGridFromData(){
+				
+			}
+			
+			function exportData(){
+				console.log(JSON.stringify(allData));
+			}
+			
+			
+			//格子被点击之后的具体处理
+			//此处颜色要与按钮的颜色保持一致
+			function cellClicked(row,col){
+				console.log(currentType)
+				var cellData=cellsDataArray[row][col];
+				if(currentType=='stone'){
+					$("#"+row+"_"+col).css("background","black");
+					cellData.type=1;
+				}else if(currentType=='wood'){
+					$("#"+row+"_"+col).css("background","darkolivegreen");
+					cellData.type=2;
+				}else if(currentType=='steelEnemy'){
+					$("#"+row+"_"+col).css("background","darkred");
+					cellData.type=3;
+				}else if(currentType=='woodEnemy'){
+					$("#"+row+"_"+col).css("background","orange");
+					cellData.type=4;
+				}else{
+					$("#"+row+"_"+col).css("background","transparent");
+					cellData.type=0;
+				}
+			}
+
+			function opacityChanged(){
+				var opacity = $("#backgroundOpacity").val()/100;
+				console.log(opacity)
+				$("table td").css({"opacity":opacity});
+			}
+
+		</script>
+	</body>
+</html>
