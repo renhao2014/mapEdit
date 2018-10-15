@@ -51,7 +51,7 @@
 	</style>
 	<body>
 		<div id="map">
-			<img id="mapBackground" src="images/map/longrenzhita.png" />
+			<img id="mapBackground" src="" />
 			<div id="functionDiv">
 				<!--根据图片放置表格-->
 				<table id="cellTable">
@@ -62,14 +62,19 @@
 		<div style="height: 200px;height: 200px;">
 			<hr/>
 			<div style="margin-left: 10px;margin-bottom: 15px;">
+				<!--改为直接在代码中指定 隐藏-->
 				<div style="display: none;">
 				<span>导入图片</span>
 				<input type="file" id="importPic" accept="image/png"/>  &nbsp;&nbsp;&nbsp;
 				</div>
 				
+				<!--改为直接在代码中指定 隐藏-->
+				<div style="display: none;">
 				<span>导入数据</span>
 				<input type="file" id="importData" accept=".json"/>  &nbsp;&nbsp;&nbsp;
+				</div>
 				<input type="button" id="exportData" value="导出数据"/>  &nbsp;&nbsp;&nbsp;
+				
 			</div>
 			
 			<div style="margin-left: 10px;margin-bottom: 15px;">
@@ -115,7 +120,13 @@
 		
 		
 		<script type="text/javascript">
-			var currentType=0;//当前格子类型（ID）
+			//背景图（如果配置了下面jsonFile，则需要和其中配置数据的行列大小匹配）
+			backgroundPath="map/longrenzhita/1/longrenzhita-1.png";
+			//对应图的数据（重新开始创建时，将此处设置为''）
+			jsonFile="map/longrenzhita/1/longrenzhita-1.json";
+			
+			
+			currentType=0;//当前格子类型,默认0（ID）
 			//二维数组 数组中的对象记载着格子信息
 			cellsDataArray = new Array(); 
 
@@ -131,9 +142,27 @@
 			
 			$(function(){
 				//根据图像初始化表格
-				refreshGridFromPic();
+				$("#mapBackground").attr("src",backgroundPath);
+				var img = new Image();
+				img.src = backgroundPath;
 				
+				if(img.complete) {
+					console.log('width:'+img.width+',height:'+img.height);
+				   refreshGridFromPic(img.width,img.height);
+				   init();
+				}else{
+				    img.onload = function() {
+				    	console.log('width:'+img.width+',height:'+img.height);
+				        refreshGridFromPic(img.width,img.height);
+				        init();
+				    }
+				}				
+
+			
 				
+			});
+			
+			function init(){
 				//监听导入图片
 //				$("#importPic").change(function(){
 ////					var img=$("#importPic");
@@ -194,45 +223,78 @@
 				//点击刷新 关闭时提示
 //			    window.onbeforeunload = function(event) {
 //			          return "您编辑的信息尚未保存，您确定要离开吗？"//这里内容不会显示在提示框，为了增加语义化。
-//			    };
+//			    };				
+			}
 			
-				
-			});
 			
 			
 			//读取背景图   更新格子数量以及对应数据
 			//二维格子
-			function refreshGridFromPic(){
-				var img = new Image()
-				img.src = "images/map/longrenzhita.png";
-				console.log('width:'+img.width+',height:'+img.height);
-				picData.row=img.height/40;
-				picData.col=img.width/40;
-			
-				for(var i=0;i<picData.row;i++){
-					cellsDataArray[i]=new Array();
-					for(var j=0;j<picData.col;j++){ 
-						var cell=new Object();
-						cell.row=i;
-						cell.col=j;
-						cell.type=0;//默认都是空地
-						cellsDataArray[i][j]=cell;
-					}
+			function refreshGridFromPic(imgWidth,imgHeight){
+				console.log(jsonFile)
+				//配置了json文件时，读取json文件 检查与当前背景图是否匹配以及根据数据绘制表格
+				var jsonFileConfig=false;
+				if(jsonFile!=undefined && jsonFile!=''){
+					jsonFileConfig=true;
+					$.ajaxSettings.async = false;
+					$.getJSON(jsonFile,{},function(data){
+						allData.cellsDataArray=data.cellsDataArray;
+						allData.picData=data.picData;
+						
+						if(	allData.picData.row!=(imgHeight/40) || allData.picData.col!=(imgWidth/40)){
+							layer.msg("背景图与配置文件中数据不匹配，请重新在代码中设置配置文件");
+							return;
+						}
+					})
+				}else{
+					allData.picData.row=imgHeight/40;
+					allData.picData.col=imgWidth/40;
+					for(var i=0;i<allData.picData.row;i++){
+						allData.cellsDataArray[i]=new Array();
+						for(var j=0;j<allData.picData.col;j++){ 
+							var cell=new Object();
+							cell.row=i;
+							cell.col=j;
+							cell.type=0;//默认都是空地
+							allData.cellsDataArray[i][j]=cell;
+						}
+					}					
 				}
-				
-				var data={
-					picData:picData,
-					cellsDataArray:cellsDataArray,
+
+				var renderData={
+					picData:allData.picData,
+					cellsDataArray:allData.cellsDataArray,
 				};
 
-				var html = template('tpl-cell',data);
+				var html = template('tpl-cell',renderData);
 				//console.log(html);
 				$("#cellTable").append(html);
 				
+				if(jsonFileConfig){
+					refreshGridFromData();
+				}
 			}
 			
 			function refreshGridFromData(){
 				
+				//根据当前数据绘制表格颜色等
+				for(var i=0;i<allData.picData.row;i++){
+					for(var j=0;j<allData.picData.col;j++){ 
+						var type;
+						if(allData.cellsDataArray[i][j].type=='0'){
+							type="nothing";
+						}else if(allData.cellsDataArray[i][j].type=='1'){
+							type="stone";
+						}else if(allData.cellsDataArray[i][j].type=='2'){
+							type="wood";
+						}else if(allData.cellsDataArray[i][j].type=='3'){
+							type="steelEnemy";
+						}else if(allData.cellsDataArray[i][j].type=='4'){
+							type="woodEnemy";
+						}
+						cellClicked(i,j,type);
+					}
+				}	
 			}
 			
 			function exportData(){
@@ -242,19 +304,22 @@
 			
 			//格子被点击之后的具体处理
 			//此处颜色要与按钮的颜色保持一致
-			function cellClicked(row,col){
+			function cellClicked(row,col,type){
+				if(type==undefined || type==''){
+					type=currentType;
+				}
 				console.log(currentType)
-				var cellData=cellsDataArray[row][col];
-				if(currentType=='stone'){
+				var cellData=allData.cellsDataArray[row][col];
+				if(type=='stone'){
 					$("#"+row+"_"+col).css("background","black");
 					cellData.type=1;
-				}else if(currentType=='wood'){
+				}else if(type=='wood'){
 					$("#"+row+"_"+col).css("background","darkolivegreen");
 					cellData.type=2;
-				}else if(currentType=='steelEnemy'){
+				}else if(type=='steelEnemy'){
 					$("#"+row+"_"+col).css("background","darkred");
 					cellData.type=3;
-				}else if(currentType=='woodEnemy'){
+				}else if(type=='woodEnemy'){
 					$("#"+row+"_"+col).css("background","orange");
 					cellData.type=4;
 				}else{
